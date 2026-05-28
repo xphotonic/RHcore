@@ -1,0 +1,27 @@
+name: l2-session-csv
+
+on:
+  push:
+    paths:
+      - "tools/l2_session_csv.py"
+      - "tests/test_l2_session_csv.py"
+      - ".github/workflows/l2_session_csv.yml"
+  pull_request:
+    paths:
+      - "tools/l2_session_csv.py"
+      - "tests/test_l2_session_csv.py"
+      - ".github/workflows/l2_session_csv.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test L2 session CSV generator
+        run: |
+          python -m py_compile tools/l2_session_csv.py tests/test_l2_session_csv.py
+          python tests/test_l2_session_csv.py
+
