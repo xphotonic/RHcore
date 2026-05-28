@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import shutil
 import subprocess
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -127,7 +128,18 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if not bundle.exists():
         raise SystemExit(f"missing bundle: {bundle}")
 
-    run(["cosign", "verify-blob", "--bundle", str(bundle), str(checksums)])
+    cmd = ["cosign", "verify-blob", "--bundle", str(bundle), str(checksums)]
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if repo:
+        cmd.extend(
+            [
+                "--certificate-identity-regexp",
+                f"https://github.com/{repo}/.*",
+                "--certificate-oidc-issuer",
+                "https://token.actions.githubusercontent.com",
+            ]
+        )
+    run(cmd)
     print("verify: OK")
     return 0
 
@@ -173,4 +185,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

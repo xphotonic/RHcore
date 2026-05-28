@@ -24,18 +24,28 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    root = Path(__file__).resolve().parents[1]
     out_nb = Path(args.output_notebook)
+    if not out_nb.is_absolute():
+        out_nb = root / out_nb
     out_nb.parent.mkdir(parents=True, exist_ok=True)
+
+    trace_path = Path(args.trace_path)
+    if not trace_path.is_absolute():
+        trace_path = root / trace_path
+    typeb_json = Path(args.typeb_json)
+    if not typeb_json.is_absolute():
+        typeb_json = root / typeb_json
 
     cmd = [
         sys.executable,
         "-m",
         "papermill",
-        "notebooks/landauer.ipynb",
+        str(root / "notebooks/landauer.ipynb"),
         str(out_nb),
         "-p",
         "trace_path",
-        args.trace_path,
+        str(trace_path),
         "-p",
         "block_size",
         str(args.block_size),
@@ -44,7 +54,7 @@ def main() -> int:
         args.cycle_column,
         "-p",
         "typeb_json",
-        args.typeb_json,
+        str(typeb_json),
         "-p",
         "sample_rate_hz",
         str(args.sample_rate_hz),

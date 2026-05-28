@@ -3,7 +3,7 @@
 # Reads operator_eigs.json (or builds a small skew-symmetric demo matrix).
 # Checks that eigenvalues pair as eigs[i] ≈ -eigs[j] within rel-tol.
 
-using LinearAlgebra, Printf, JSON3
+using LinearAlgebra, Printf
 
 function parse_arg(prefix, default)
     for a in ARGS
@@ -18,8 +18,12 @@ out       = parse_arg("--out", "artifacts/parity_involution.json")
 
 # Build or load eigenvalues
 if !isempty(eigs_path) && isfile(eigs_path)
-    data = JSON3.read(read(eigs_path, String))
-    eigs = Float64.(data["eigenvalues"])
+    # Tiny dependency-free parser for files containing
+    # {"eigenvalues":[...]} so the CI card does not need external Julia deps.
+    text = read(eigs_path, String)
+    m = match(r"\"eigenvalues\"\s*:\s*\[([^\]]*)\]", text)
+    m === nothing && error("missing eigenvalues array in $eigs_path")
+    eigs = [parse(Float64, strip(x)) for x in split(m.captures[1], ",") if !isempty(strip(x))]
 else
     # Demo: skew-symmetric 6×6 → purely imaginary eigs → real part = 0
     B = [0 1 0; -1 0 1; 0 -1 0] .* 1.0
