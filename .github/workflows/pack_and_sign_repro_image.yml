@@ -1,0 +1,210 @@
+name: pack-and-sign-repro-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      flint_commit:
+        description: "40-hex FLINT commit from https://github.com/flintlib/flint"
+        required: false
+        default: "b574c48f46ca505d6d48dd843c0fe95e1199ecdc"
+      lean_nightly_tag:
+        description: "Lean tag recorded in the RO-Crate metadata"
+        required: false
+        default: "leanprover/lean4:v4.14.0"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+env:
+  DEFAULT_FLINT_COMMIT: "b574c48f46ca505d6d48dd843c0fe95e1199ecdc"
+  DEFAULT_LEAN_NIGHTLY_TAG: "leanprover/lean4:v4.14.0"
+
+jobs:
+  pack-sign:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Capture pinned metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          GIT_SHA="$(git rev-parse --verify HEAD)"
+          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG="repro-${SHORT_SHA}"
+          fi
+          FLINT_COMMIT="${{ github.event.inputs.flint_commit }}"
+          LEAN_NIGHTLY_TAG="${{ github.event.inputs.lean_nightly_tag }}"
+          if [ -z "$FLINT_COMMIT" ]; then FLINT_COMMIT="$DEFAULT_FLINT_COMMIT"; fi
+          if [ -z "$LEAN_NIGHTLY_TAG" ]; then LEAN_NIGHTLY_TAG="$DEFAULT_LEAN_NIGHTLY_TAG"; fi
+          if ! printf '%s' "$FLINT_COMMIT" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "invalid FLINT_COMMIT: $FLINT_COMMIT" >&2
+            exit 1
+          fi
+          git init /tmp/flint-check
+          git -C /tmp/flint-check remote add origin https://github.com/flintlib/flint.git
+          git -C /tmp/flint-check fetch --depth=1 origin "$FLINT_COMMIT"
+          IMAGE_REPO="$(printf 'ghcr.io/%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_NAME="${IMAGE_REPO}:${RELEASE_TAG}"
+          echo "$LEAN_NIGHTLY_TAG" > .pin.lean-nightly
+          echo "$FLINT_COMMIT" > .pin.flint-commit
+          echo "sha=$GIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "flint_commit=$FLINT_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "lean_nightly_tag=$LEAN_NIGHTLY_TAG" >> "$GITHUB_OUTPUT"
+          echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image_name }}
+          provenance: false
+
+      - name: Generate RO-Crate metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p crate
+          cat > crate/ro-crate-metadata.json <<JSON
+          {
+            "@context": "https://w3id.org/ro/crate/1.1/context",
+            "@graph": [
+              {
+                "@id": "ro-crate-metadata.json",
+                "@type": "CreativeWork",
+                "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"},
+                "about": {"@id": "./"}
+              },
+              {
+                "@id": "./",
+                "@type": "Dataset",
+                "name": "RhCore reproducible image crate",
+                "identifier": "${{ steps.meta.outputs.tag }}",
+                "version": "${{ steps.meta.outputs.sha }}",
+                "description": "Pinned Docker image digest and provenance for RhCore lambda_n ingestion",
+                "hasPart": [
+                  {"@id": "Dockerfile"},
+                  {"@id": "lean-toolchain"},
+                  {"@id": "lakefile.lean"},
+                  {"@id": ".pin.lean-nightly"},
+                  {"@id": ".pin.flint-commit"}
+                ]
+              },
+              {
+                "@id": "#build-info",
+                "@type": "SoftwareSourceCode",
+                "programmingLanguage": "Docker",
+                "identifier": "build-info",
+                "url": "${{ github.server_url }}/${{ github.repository }}/tree/${{ steps.meta.outputs.sha }}",
+                "additionalProperty": [
+                  {"@type": "PropertyValue", "name": "git:commit", "value": "${{ steps.meta.outputs.sha }}"},
+                  {"@type": "PropertyValue", "name": "git:tag", "value": "${{ steps.meta.outputs.tag }}"},
+                  {"@type": "PropertyValue", "name": "docker:digest", "value": "${{ steps.meta.outputs.image_name }}@${{ steps.build.outputs.digest }}"},
+                  {"@type": "PropertyValue", "name": "lean:nightly", "value": "${{ steps.meta.outputs.lean_nightly_tag }}"},
+                  {"@type": "PropertyValue", "name": "flint:commit", "value": "${{ steps.meta.outputs.flint_commit }}"}
+                ]
+              }
+            ]
+          }
+          JSON
+
+      - name: Assemble crate payload
+        id: assemble
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .pin.lean-nightly crate/
+          cp .pin.flint-commit crate/
+          cp Dockerfile crate/
+          cp lean-toolchain crate/
+          cp lakefile.lean crate/
+          for f in LICENSE README.md README* NOTICE* .gitmodules lake-manifest.json; do
+            [ -e "$f" ] && cp "$f" crate/
+          done
+          TAR_NAME="rocrate-${{ steps.meta.outputs.sha }}.tar.gz"
+          tar -C crate -czf "$TAR_NAME" .
+          sha256sum "$TAR_NAME" > "$TAR_NAME.sha256"
+          echo "tar=$TAR_NAME" >> "$GITHUB_OUTPUT"
+          echo "bundle=$TAR_NAME.sigstore.bundle.json" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Keyless sign crate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign sign-blob \
+            --yes \
+            --bundle "${{ steps.assemble.outputs.bundle }}" \
+            "${{ steps.assemble.outputs.tar }}"
+
+      - name: Verify crate signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign verify-blob \
+            --bundle "${{ steps.assemble.outputs.bundle }}" \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${{ steps.assemble.outputs.tar }}"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          TITLE="Reproducible RhCore crate for ${TAG}"
+          NOTES="$(cat <<EOF
+          **git:commit** \`${{ steps.meta.outputs.sha }}\`
+          **docker:digest** \`${{ steps.meta.outputs.image_name }}@${{ steps.build.outputs.digest }}\`
+          **lean:nightly** \`${{ steps.meta.outputs.lean_nightly_tag }}\`
+          **flint:commit** \`${{ steps.meta.outputs.flint_commit }}\`
+          EOF
+          )"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
+          else
+            gh release create "$TAG" --title "$TITLE" --notes "$NOTES"
+          fi
+
+      - name: Upload artifacts to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "${{ steps.meta.outputs.tag }}" \
+            "${{ steps.assemble.outputs.tar }}" \
+            "${{ steps.assemble.outputs.tar }}.sha256" \
+            "${{ steps.assemble.outputs.bundle }}" \
+            --clobber

@@ -1,0 +1,17 @@
+.git
+.lake
+.vscode
+artifacts
+out
+output
+outputs
+tmp
+__pycache__
+*.olean
+*.ilean
+*.c
+*.tar.gz
+*.sigstore.json
+*.sha256
+rocrate-*
+
