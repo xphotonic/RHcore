@@ -1,0 +1,181 @@
+name: pack-and-sign-arb-artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      arb_commit:
+        description: "40-hex Arb commit from https://github.com/flintlib/arb"
+        required: false
+        default: "af15c0070a6d9fbc551a2cbf23364387233b18e3"
+  push:
+    branches: [main]
+    paths:
+      - "data/li_n_intervals.csv"
+      - "tools/generate_spectral_eigs.py"
+      - "tools/build_ro_crate.py"
+      - "tools/verify_ro_crate_checksums.py"
+      - ".github/workflows/pack_and_sign_arb_artifact.yml"
+      - "lakefile.lean"
+      - "lean-toolchain"
+      - "RhCore/**"
+  pull_request:
+    paths:
+      - "data/li_n_intervals.csv"
+      - "tools/generate_spectral_eigs.py"
+      - "tools/build_ro_crate.py"
+      - "tools/verify_ro_crate_checksums.py"
+      - ".github/workflows/pack_and_sign_arb_artifact.yml"
+      - "lakefile.lean"
+      - "lean-toolchain"
+      - "RhCore/**"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  pack-and-sign:
+    runs-on: ubuntu-latest
+    env:
+      DEFAULT_ARB_COMMIT: "af15c0070a6d9fbc551a2cbf23364387233b18e3"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Capture commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "GIT_COMMIT=$(git rev-parse --verify HEAD)" >> "$GITHUB_ENV"
+          ARB_COMMIT="${{ github.event.inputs.arb_commit }}"
+          if [ -z "$ARB_COMMIT" ]; then ARB_COMMIT="$DEFAULT_ARB_COMMIT"; fi
+          if ! printf '%s' "$ARB_COMMIT" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "invalid ARB_COMMIT: $ARB_COMMIT" >&2
+            exit 1
+          fi
+          git ls-remote https://github.com/flintlib/arb.git HEAD >/dev/null
+          echo "ARB_COMMIT=$ARB_COMMIT" >> "$GITHUB_ENV"
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential automake autoconf libtool git python3 jq wget \
+            pkg-config ca-certificates libgmp-dev libmpfr-dev libflint-dev
+
+      - name: Build Arb at pinned commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/flintlib/arb.git arb-src
+          cd arb-src
+          git checkout "$ARB_COMMIT"
+          ./configure --prefix="$PWD/../arb-install"
+          make -j"$(nproc)"
+          make install
+          cd ..
+          test -d arb-install
+
+      - name: Install Lean
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: true
+          use-mathlib-cache: true
+          build: false
+
+      - name: Generate eig artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          python3 tools/generate_spectral_eigs.py \
+            --input data/li_n_intervals.csv \
+            --out output/generated_eigs.lean
+          python3 - <<'PY'
+          import csv, json
+          from pathlib import Path
+          rows = []
+          with Path("data/li_n_intervals.csv").open(newline="", encoding="utf-8-sig") as handle:
+              for row in csv.DictReader(handle):
+                  rows.append({
+                      "n": int(row["n"]),
+                      "mid": row.get("mid", row.get("midpoint")),
+                      "rad": row.get("rad", row.get("radius")),
+                  })
+          payload = {
+              "source": "data/li_n_intervals.csv",
+              "generator": "tools/generate_spectral_eigs.py",
+              "rows": rows,
+          }
+          Path("output/generated_eigs.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+          PY
+          cp output/generated_eigs.lean RhCore/Spectral/GeneratedEigs.lean
+          lake build RhCore.Spectral.GeneratedEigs
+
+      - name: Build RO-Crate directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          RO_DIR="rocrate-${GIT_COMMIT}"
+          mkdir -p "$RO_DIR/data"
+          cp output/generated_eigs.json "$RO_DIR/data/generated_eigs.json"
+          cp output/generated_eigs.lean "$RO_DIR/data/generated_eigs.lean"
+          cp data/li_n_intervals.csv "$RO_DIR/data/li_n_intervals.csv"
+          python3 tools/build_ro_crate.py \
+            --artifact "$RO_DIR/data/generated_eigs.json" \
+            --artifact "$RO_DIR/data/generated_eigs.lean" \
+            --artifact "$RO_DIR/data/li_n_intervals.csv" \
+            --artifact lean-toolchain \
+            --artifact lakefile.lean \
+            --out "$RO_DIR/ro-crate-metadata.json" \
+            --attestation "$RO_DIR/generated_eigs.attestation.json" \
+            --run-id "${{ github.run_id }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --commit-sha "$GIT_COMMIT" \
+            --provenance "{\"arb_repo\":\"https://github.com/flintlib/arb\",\"arb_commit\":\"$ARB_COMMIT\",\"source\":\"data/li_n_intervals.csv\"}"
+          python3 tools/verify_ro_crate_checksums.py --crate "$RO_DIR/ro-crate-metadata.json" --root .
+          tar -C "$RO_DIR" -czf "rocrate-${GIT_COMMIT}.tar.gz" .
+          sha256sum "rocrate-${GIT_COMMIT}.tar.gz" > "rocrate-${GIT_COMMIT}.tar.gz.sha256"
+          echo "RO_DIR=$RO_DIR" >> "$GITHUB_ENV"
+          echo "RO_CRATE=rocrate-${GIT_COMMIT}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign RO-Crate keylessly
+        if: github.event_name != 'pull_request'
+        run: |
+          cosign sign-blob --yes \
+            --bundle "${RO_CRATE}.sigstore.json" \
+            "$RO_CRATE"
+
+      - name: Verify RO-Crate signature
+        if: github.event_name != 'pull_request'
+        run: |
+          cosign verify-blob \
+            --bundle "${RO_CRATE}.sigstore.json" \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$RO_CRATE"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arb-rocrate-${{ github.sha }}
+          path: |
+            ${{ env.RO_CRATE }}
+            ${{ env.RO_CRATE }}.sha256
+            ${{ env.RO_CRATE }}.sigstore.json
+
+      - name: Create release with signed RO-Crate
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: prebuilt-${{ github.sha }}
+          name: prebuilt-${{ github.sha }}
+          files: |
+            ${{ env.RO_CRATE }}
+            ${{ env.RO_CRATE }}.sha256
+            ${{ env.RO_CRATE }}.sigstore.json

@@ -12,6 +12,7 @@ venv/
 
 # Local/generated run outputs
 out/
+output/
 outputs/*
 !outputs/.gitkeep
 artifacts/*
