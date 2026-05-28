@@ -41,6 +41,23 @@ def assert_safe_member(member: tarfile.TarInfo) -> None:
         raise ValueError(f"unsafe tar member path: {name}")
 
 
+def extract_safe(tar: tarfile.TarFile, root: Path) -> None:
+    for member in tar.getmembers():
+        assert_safe_member(member)
+        target = root / member.name
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        if not member.isfile():
+            raise ValueError(f"unsupported tar member type: {member.name}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = tar.extractfile(member)
+        if source is None:
+            raise ValueError(f"could not extract tar member: {member.name}")
+        with source, target.open("wb") as handle:
+            handle.write(source.read())
+
+
 def verify_sidecar(tar_path: Path, sidecar_path: Path) -> None:
     if not sidecar_path:
         return
@@ -81,9 +98,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="rocrate-verify-") as tmp:
         root = Path(tmp)
         with tarfile.open(tar_path, "r:gz") as tar:
-            for member in tar.getmembers():
-                assert_safe_member(member)
-            tar.extractall(root)
+            extract_safe(tar, root)
 
         metadata_path = root / "ro-crate-metadata.json"
         if not metadata_path.exists():
@@ -122,4 +137,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
