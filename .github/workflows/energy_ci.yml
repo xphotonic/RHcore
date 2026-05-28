@@ -36,7 +36,19 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Run Landauer notebook
+      - name: Run Landauer CSV analysis
+        run: |
+          TRACE_PATH="${{ github.event.inputs.trace_path }}"
+          BLOCK_SIZE="${{ github.event.inputs.block_size }}"
+          if [ -z "$TRACE_PATH" ]; then TRACE_PATH="traces/run1.csv"; fi
+          if [ -z "$BLOCK_SIZE" ]; then BLOCK_SIZE="5"; fi
+          python scripts/run_landauer_csv.py \
+            --trace-path "$TRACE_PATH" \
+            --block-size "$BLOCK_SIZE" \
+            --outputs-dir outputs
+
+      - name: Render Landauer notebook
+        continue-on-error: true
         run: |
           TRACE_PATH="${{ github.event.inputs.trace_path }}"
           BLOCK_SIZE="${{ github.event.inputs.block_size }}"
