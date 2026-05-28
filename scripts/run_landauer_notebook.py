@@ -36,6 +36,13 @@ def main() -> int:
     typeb_json = Path(args.typeb_json)
     if not typeb_json.is_absolute():
         typeb_json = root / typeb_json
+    if not trace_path.exists():
+        raise SystemExit(f"missing trace file: {trace_path}")
+    if not typeb_json.exists():
+        raise SystemExit(f"missing type-B config: {typeb_json}")
+    print(f"trace_path={trace_path}")
+    print(f"typeb_json={typeb_json}")
+    print(f"output_notebook={out_nb}")
 
     cmd = [
         sys.executable,

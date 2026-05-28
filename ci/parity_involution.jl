@@ -21,7 +21,7 @@ if !isempty(eigs_path) && isfile(eigs_path)
     # Tiny dependency-free parser for files containing
     # {"eigenvalues":[...]} so the CI card does not need external Julia deps.
     text = read(eigs_path, String)
-    m = match(r"\"eigenvalues\"\s*:\s*\[([^\]]*)\]", text)
+    m = match(Regex("\"eigenvalues\"\\s*:\\s*\\[([^\\]]*)\\]"), text)
     m === nothing && error("missing eigenvalues array in $eigs_path")
     eigs = [parse(Float64, strip(x)) for x in split(m.captures[1], ",") if !isempty(strip(x))]
 else
