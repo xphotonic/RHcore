@@ -24,7 +24,4 @@ COPY RhCore ./RhCore
 COPY data ./data
 COPY tools ./tools
 
-RUN lake exe cache get || true
-RUN lake build RhCore.Final
-
 CMD ["lake", "build", "RhCore.Final"]

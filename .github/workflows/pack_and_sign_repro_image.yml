@@ -78,6 +78,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install Lean and verify source tree
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: true
+          use-mathlib-cache: true
+          build: false
+
+      - name: Build Lean target before packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build RhCore.Final
+
       - name: Build and push image by digest
         id: build
         uses: docker/build-push-action@v6
