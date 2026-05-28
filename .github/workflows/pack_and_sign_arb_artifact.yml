@@ -3,10 +3,10 @@ name: pack-and-sign-arb-artifact
 on:
   workflow_dispatch:
     inputs:
-      arb_commit:
-        description: "40-hex Arb commit from https://github.com/flintlib/arb"
+      flint_commit:
+        description: "40-hex FLINT commit from https://github.com/flintlib/flint"
         required: false
-        default: "af15c0070a6d9fbc551a2cbf23364387233b18e3"
+        default: "b574c48f46ca505d6d48dd843c0fe95e1199ecdc"
   push:
     branches: [main]
     paths:
@@ -37,7 +37,7 @@ jobs:
   pack-and-sign:
     runs-on: ubuntu-latest
     env:
-      DEFAULT_ARB_COMMIT: "af15c0070a6d9fbc551a2cbf23364387233b18e3"
+      DEFAULT_FLINT_COMMIT: "b574c48f46ca505d6d48dd843c0fe95e1199ecdc"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,34 +49,35 @@ jobs:
         run: |
           set -euo pipefail
           echo "GIT_COMMIT=$(git rev-parse --verify HEAD)" >> "$GITHUB_ENV"
-          ARB_COMMIT="${{ github.event.inputs.arb_commit }}"
-          if [ -z "$ARB_COMMIT" ]; then ARB_COMMIT="$DEFAULT_ARB_COMMIT"; fi
-          if ! printf '%s' "$ARB_COMMIT" | grep -qE '^[0-9a-f]{40}$'; then
-            echo "invalid ARB_COMMIT: $ARB_COMMIT" >&2
+          FLINT_COMMIT="${{ github.event.inputs.flint_commit }}"
+          if [ -z "$FLINT_COMMIT" ]; then FLINT_COMMIT="$DEFAULT_FLINT_COMMIT"; fi
+          if ! printf '%s' "$FLINT_COMMIT" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "invalid FLINT_COMMIT: $FLINT_COMMIT" >&2
             exit 1
           fi
-          git ls-remote https://github.com/flintlib/arb.git HEAD >/dev/null
-          echo "ARB_COMMIT=$ARB_COMMIT" >> "$GITHUB_ENV"
+          git ls-remote https://github.com/flintlib/flint.git HEAD >/dev/null
+          echo "FLINT_COMMIT=$FLINT_COMMIT" >> "$GITHUB_ENV"
 
       - name: Install build deps
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential automake autoconf libtool git python3 jq wget \
-            pkg-config ca-certificates libgmp-dev libmpfr-dev libflint-dev
+            pkg-config ca-certificates libgmp-dev libmpfr-dev
 
-      - name: Build Arb at pinned commit
+      - name: Build FLINT/Arb at pinned commit
         shell: bash
         run: |
           set -euo pipefail
-          git clone https://github.com/flintlib/arb.git arb-src
-          cd arb-src
-          git checkout "$ARB_COMMIT"
-          ./configure --prefix="$PWD/../arb-install"
+          git clone https://github.com/flintlib/flint.git flint-src
+          cd flint-src
+          git checkout "$FLINT_COMMIT"
+          if [ -x ./bootstrap.sh ]; then ./bootstrap.sh; fi
+          ./configure --prefix="$PWD/../flint-install"
           make -j"$(nproc)"
           make install
           cd ..
-          test -d arb-install
+          test -d flint-install
 
       - name: Install Lean
         uses: leanprover/lean-action@v1
@@ -134,7 +135,7 @@ jobs:
             --run-id "${{ github.run_id }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --commit-sha "$GIT_COMMIT" \
-            --provenance "{\"arb_repo\":\"https://github.com/flintlib/arb\",\"arb_commit\":\"$ARB_COMMIT\",\"source\":\"data/li_n_intervals.csv\"}"
+            --provenance "{\"arb_compat_source\":\"flint\",\"flint_repo\":\"https://github.com/flintlib/flint\",\"flint_commit\":\"$FLINT_COMMIT\",\"source\":\"data/li_n_intervals.csv\"}"
           python3 tools/verify_ro_crate_checksums.py --crate "$RO_DIR/ro-crate-metadata.json" --root .
           tar -C "$RO_DIR" -czf "rocrate-${GIT_COMMIT}.tar.gz" .
           sha256sum "rocrate-${GIT_COMMIT}.tar.gz" > "rocrate-${GIT_COMMIT}.tar.gz.sha256"
