@@ -124,19 +124,21 @@ jobs:
           cp output/generated_eigs.json "$RO_DIR/data/generated_eigs.json"
           cp output/generated_eigs.lean "$RO_DIR/data/generated_eigs.lean"
           cp data/li_n_intervals.csv "$RO_DIR/data/li_n_intervals.csv"
+          cp lean-toolchain "$RO_DIR/data/lean-toolchain"
+          cp lakefile.lean "$RO_DIR/data/lakefile.lean"
           python3 tools/build_ro_crate.py \
             --artifact "$RO_DIR/data/generated_eigs.json" \
             --artifact "$RO_DIR/data/generated_eigs.lean" \
             --artifact "$RO_DIR/data/li_n_intervals.csv" \
-            --artifact lean-toolchain \
-            --artifact lakefile.lean \
+            --artifact "$RO_DIR/data/lean-toolchain" \
+            --artifact "$RO_DIR/data/lakefile.lean" \
             --out "$RO_DIR/ro-crate-metadata.json" \
             --attestation "$RO_DIR/generated_eigs.attestation.json" \
             --run-id "${{ github.run_id }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --commit-sha "$GIT_COMMIT" \
             --provenance "{\"arb_compat_source\":\"flint\",\"flint_repo\":\"https://github.com/flintlib/flint\",\"flint_commit\":\"$FLINT_COMMIT\",\"source\":\"data/li_n_intervals.csv\"}"
-          python3 tools/verify_ro_crate_checksums.py --crate "$RO_DIR/ro-crate-metadata.json" --root .
+          python3 tools/verify_ro_crate_checksums.py --crate "$RO_DIR/ro-crate-metadata.json" --root "$RO_DIR/data"
           tar -C "$RO_DIR" -czf "rocrate-${GIT_COMMIT}.tar.gz" .
           sha256sum "rocrate-${GIT_COMMIT}.tar.gz" > "rocrate-${GIT_COMMIT}.tar.gz.sha256"
           echo "RO_DIR=$RO_DIR" >> "$GITHUB_ENV"
