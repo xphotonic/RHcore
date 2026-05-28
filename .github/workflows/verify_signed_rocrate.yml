@@ -1,6 +1,9 @@
 name: verify-signed-rocrate
 
 on:
+  workflow_run:
+    workflows: ["pack-and-sign-repro-image"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -13,6 +16,7 @@ permissions:
 
 jobs:
   verify:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout verifier source
@@ -22,7 +26,7 @@ jobs:
         id: download
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.event.inputs.release_tag }}
+          TAG: ${{ github.event.inputs.release_tag || github.event.workflow_run.head_branch }}
         shell: bash
         run: |
           set -euo pipefail
