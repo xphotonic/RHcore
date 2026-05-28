@@ -1,0 +1,83 @@
+name: verify-signed-rocrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag containing the signed RO-Crate"
+        required: true
+        default: "v0.1.3"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout verifier source
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        id: download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p downloaded-rocrate
+          curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/releases/tags/${TAG}" \
+            > release.json
+          TAR_URL="$(jq -r '.assets[] | select(.name|test("^rocrate-.*\\.tar\\.gz$")) | .browser_download_url' release.json | head -n1)"
+          SHA_URL="$(jq -r '.assets[] | select(.name|test("^rocrate-.*\\.tar\\.gz\\.sha256$")) | .browser_download_url' release.json | head -n1)"
+          BUNDLE_URL="$(jq -r '.assets[] | select(.name|test("^rocrate-.*\\.tar\\.gz\\.sigstore\\.(bundle\\.)?json$")) | .browser_download_url' release.json | head -n1)"
+          test -n "$TAR_URL"
+          test -n "$SHA_URL"
+          test -n "$BUNDLE_URL"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$TAR_URL" -o downloaded-rocrate/rocrate.tar.gz
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$SHA_URL" -o downloaded-rocrate/rocrate.tar.gz.sha256
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$BUNDLE_URL" -o downloaded-rocrate/rocrate.sigstore.bundle.json
+          echo "tar=downloaded-rocrate/rocrate.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "sha=downloaded-rocrate/rocrate.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+          echo "bundle=downloaded-rocrate/rocrate.sigstore.bundle.json" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify Sigstore signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign verify-blob \
+            --bundle "${{ steps.download.outputs.bundle }}" \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/pack_and_sign_repro_image.yml@refs/(tags|heads)/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${{ steps.download.outputs.tar }}"
+
+      - name: Verify RO-Crate checksums and required provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/verify_signed_rocrate.py \
+            --tar "${{ steps.download.outputs.tar }}" \
+            --sha256 "${{ steps.download.outputs.sha }}" \
+            --expect-docker-digest \
+            --expect-flint-commit \
+            --expect-lean-tag
+
+      - name: Install Lean
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: true
+          use-mathlib-cache: true
+          build: false
+
+      - name: Build Lean after trust gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          lake build RhCore.Final

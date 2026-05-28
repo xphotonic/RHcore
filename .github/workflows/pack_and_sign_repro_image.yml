@@ -105,46 +105,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p crate
-          cat > crate/ro-crate-metadata.json <<JSON
+          cat > crate/build-info.json <<JSON
           {
-            "@context": "https://w3id.org/ro/crate/1.1/context",
-            "@graph": [
-              {
-                "@id": "ro-crate-metadata.json",
-                "@type": "CreativeWork",
-                "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"},
-                "about": {"@id": "./"}
-              },
-              {
-                "@id": "./",
-                "@type": "Dataset",
-                "name": "RhCore reproducible image crate",
-                "identifier": "${{ steps.meta.outputs.tag }}",
-                "version": "${{ steps.meta.outputs.sha }}",
-                "description": "Pinned Docker image digest and provenance for RhCore lambda_n ingestion",
-                "hasPart": [
-                  {"@id": "Dockerfile"},
-                  {"@id": "lean-toolchain"},
-                  {"@id": "lakefile.lean"},
-                  {"@id": ".pin.lean-nightly"},
-                  {"@id": ".pin.flint-commit"}
-                ]
-              },
-              {
-                "@id": "#build-info",
-                "@type": "SoftwareSourceCode",
-                "programmingLanguage": "Docker",
-                "identifier": "build-info",
-                "url": "${{ github.server_url }}/${{ github.repository }}/tree/${{ steps.meta.outputs.sha }}",
-                "additionalProperty": [
-                  {"@type": "PropertyValue", "name": "git:commit", "value": "${{ steps.meta.outputs.sha }}"},
-                  {"@type": "PropertyValue", "name": "git:tag", "value": "${{ steps.meta.outputs.tag }}"},
-                  {"@type": "PropertyValue", "name": "docker:digest", "value": "${{ steps.meta.outputs.image_name }}@${{ steps.build.outputs.digest }}"},
-                  {"@type": "PropertyValue", "name": "lean:nightly", "value": "${{ steps.meta.outputs.lean_nightly_tag }}"},
-                  {"@type": "PropertyValue", "name": "flint:commit", "value": "${{ steps.meta.outputs.flint_commit }}"}
-                ]
-              }
-            ]
+            "git_commit": "${{ steps.meta.outputs.sha }}",
+            "git_tag": "${{ steps.meta.outputs.tag }}",
+            "docker_digest": "${{ steps.meta.outputs.image_name }}@${{ steps.build.outputs.digest }}",
+            "lean_nightly": "${{ steps.meta.outputs.lean_nightly_tag }}",
+            "flint_commit": "${{ steps.meta.outputs.flint_commit }}",
+            "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           }
           JSON
 
@@ -161,9 +129,92 @@ jobs:
           for f in LICENSE README.md README* NOTICE* .gitmodules lake-manifest.json; do
             [ -e "$f" ] && cp "$f" crate/
           done
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("crate")
+          build = json.loads((root / "build-info.json").read_text(encoding="utf-8"))
+
+          def sha256_file(path: Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          file_names = [
+              "Dockerfile",
+              "lean-toolchain",
+              "lakefile.lean",
+              "lake-manifest.json",
+              ".pin.lean-nightly",
+              ".pin.flint-commit",
+              "build-info.json",
+          ]
+          file_entries = []
+          has_part = []
+          for name in file_names:
+              path = root / name
+              if not path.exists():
+                  continue
+              file_entries.append({
+                  "@id": name,
+                  "@type": "File",
+                  "name": name,
+                  "contentSize": path.stat().st_size,
+                  "sha256": sha256_file(path),
+              })
+              has_part.append({"@id": name})
+
+          payload = {
+              "@context": "https://w3id.org/ro/crate/1.1/context",
+              "@graph": [
+                  {
+                      "@id": "ro-crate-metadata.json",
+                      "@type": "CreativeWork",
+                      "conformsTo": {"@id": "https://w3id.org/ro/crate/1.1"},
+                      "about": {"@id": "./"},
+                  },
+                  {
+                      "@id": "./",
+                      "@type": "Dataset",
+                      "name": "RhCore reproducible image crate",
+                      "identifier": build["git_tag"],
+                      "version": build["git_commit"],
+                      "description": "Pinned Docker image digest and provenance for RhCore lambda_n ingestion",
+                      "hasPart": has_part,
+                  },
+                  {
+                      "@id": "#build-info",
+                      "@type": "SoftwareSourceCode",
+                      "programmingLanguage": "Docker",
+                      "identifier": "build-info",
+                      "url": f"https://github.com/${{ github.repository }}/tree/{build['git_commit']}",
+                      "additionalProperty": [
+                          {"@type": "PropertyValue", "name": "git:commit", "value": build["git_commit"]},
+                          {"@type": "PropertyValue", "name": "git:tag", "value": build["git_tag"]},
+                          {"@type": "PropertyValue", "name": "docker:digest", "value": build["docker_digest"]},
+                          {"@type": "PropertyValue", "name": "lean:nightly", "value": build["lean_nightly"]},
+                          {"@type": "PropertyValue", "name": "flint:commit", "value": build["flint_commit"]},
+                          {"@type": "PropertyValue", "name": "workflow:run", "value": build["workflow_run"]},
+                      ],
+                  },
+                  *file_entries,
+              ],
+          }
+          (root / "ro-crate-metadata.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+          PY
           TAR_NAME="rocrate-${{ steps.meta.outputs.sha }}.tar.gz"
           tar -C crate -czf "$TAR_NAME" .
           sha256sum "$TAR_NAME" > "$TAR_NAME.sha256"
+          python3 tools/verify_signed_rocrate.py \
+            --tar "$TAR_NAME" \
+            --sha256 "$TAR_NAME.sha256" \
+            --expect-docker-digest \
+            --expect-flint-commit \
+            --expect-lean-tag
           echo "tar=$TAR_NAME" >> "$GITHUB_OUTPUT"
           echo "bundle=$TAR_NAME.sigstore.bundle.json" >> "$GITHUB_OUTPUT"
 
