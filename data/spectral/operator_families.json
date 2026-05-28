@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "families": [
+    {
+      "id": "A-euclidean-convex-laplacian",
+      "operator": "Euclidean Laplacian",
+      "domain": "bounded convex subsets of R^d",
+      "boundary_conditions": ["Dirichlet", "Neumann"],
+      "ci_status": "bridge-needed",
+      "notes": "Use Frank-Larson style heat-trace/Riesz certificates with explicit geometric constants."
+    },
+    {
+      "id": "B-laplace-beltrami",
+      "operator": "Laplace-Beltrami",
+      "domain": "Riemannian manifolds with declared geometric hypotheses",
+      "boundary_conditions": ["closed", "Dirichlet", "Neumann"],
+      "ci_status": "bridge-needed",
+      "notes": "Requires curvature, diameter, volume, and heat-kernel/counting certificates before numeric lower-bound extraction."
+    },
+    {
+      "id": "C-known-spectrum-benchmarks",
+      "operator": "Known-spectrum smoke tests",
+      "domain": "interval, circle, rectangle",
+      "boundary_conditions": ["Dirichlet", "Neumann", "periodic"],
+      "ci_status": "available",
+      "notes": "Used to test indexing, multiplicities, heat-trace conversion, and generated report structure."
+    }
+  ]
+}

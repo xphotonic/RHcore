@@ -1,0 +1,33 @@
+name: perovskite-data
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate perovskite device table
+        run: |
+          python tools/validate_perovskite_csv.py \
+            --csv data/perovskite/perovskite_devices_template.csv \
+            --out outputs/perovskite_devices_enriched.csv \
+            --checksums outputs/perovskite_checksums.txt \
+            --report outputs/perovskite_validation.json
+
+      - name: Upload perovskite provenance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: perovskite-data-validation
+          path: |
+            outputs/perovskite_devices_enriched.csv
+            outputs/perovskite_checksums.txt
+            outputs/perovskite_validation.json

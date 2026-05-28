@@ -1,0 +1,37 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - test -n "$JULIA_VERSION"
+      - curl -L "https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-${JULIA_VERSION}-linux-x86_64.tar.gz" -o julia.tar.gz
+      - tar -xzf julia.tar.gz
+      - export PATH="$CODEBUILD_SRC_DIR/julia-${JULIA_VERSION}/bin:$PATH"
+      - julia --version
+      - julia --project=. -e 'using Pkg; Pkg.instantiate()'
+  build:
+    commands:
+      - test -n "$ARTIFACT_BUCKET"
+      - test -n "$RUN_ID"
+      - test -n "$RUN_PREFIX"
+      - test -n "$LI_BITS"
+      - test -n "$N_START"
+      - test -n "$N_END"
+      - aws s3 cp "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/zeta_status.json" zeta_status.json
+      - |
+        export ZEROS_CHECKSUM=$(python - <<'PY'
+        import json
+        with open("zeta_status.json", "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        print(payload["summary"]["zeros_checksum"])
+        PY
+        )
+      - export PATH="$CODEBUILD_SRC_DIR/julia-${JULIA_VERSION}/bin:$PATH"
+      - julia --project=. ci/li_extend.jl --bits="$LI_BITS" --n_start="$N_START" --n_end="$N_END" --zeros-checksum="$ZEROS_CHECKSUM" --out=li_n_intervals.csv
+      - aws s3 cp li_n_intervals.csv "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/li_n_intervals.csv"
+
+artifacts:
+  files:
+    - li_n_intervals.csv

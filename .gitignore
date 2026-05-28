@@ -1,0 +1,34 @@
+# Lean/Lake build products
+.lake/
+*.olean
+*.ilean
+*.c
+
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local/generated run outputs
+out/
+outputs/*
+!outputs/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
+ci/artifacts/*
+!ci/artifacts/li_intervals.json
+_chk.txt
+zeta_status.json
+
+# Local signatures and generated attestations
+*.sig
+*.pem
+*.sha256
+*.bundle.json
+generated_eigs.attestation*.json
+ro-crate-metadata*.json
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

@@ -1,0 +1,41 @@
+RUN_ID ?= $(shell python -c "from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'))")
+OUT_ROOT ?= out
+OUT_DIR = $(OUT_ROOT)/$(RUN_ID)
+BUCKET ?= lab-artifacts
+PROJECT ?= myproj
+N ?= 10
+SEED ?= 42
+INPUT_S3 ?= s3://data/zeros/v1
+INPUT_SHA ?= unknown
+INSTANCE_TYPE ?= ml.t3.medium
+SPOT ?= 0
+
+.PHONY: all run attest push verify clean
+
+all: run attest
+
+run:
+	python tasks.py run \
+	  --run-id $(RUN_ID) \
+	  --out-root $(OUT_ROOT) \
+	  --n $(N) \
+	  --seed $(SEED) \
+	  --lock-file env.lock \
+	  --input-s3 $(INPUT_S3) \
+	  --input-sha256 $(INPUT_SHA) \
+	  --instance-type $(INSTANCE_TYPE) \
+	  $(if $(filter 1,$(SPOT)),--spot,)
+
+attest:
+	python tasks.py attest --out-dir $(OUT_DIR)
+
+push:
+	python tasks.py push --out-dir $(OUT_DIR) --bucket $(BUCKET) --project $(PROJECT)
+
+verify:
+	@test -n "$(OUT_DIR_VERIFY)" || (echo "usage: make -f Makefile.repro verify OUT_DIR_VERIFY=out/<run_id>" && exit 1)
+	python tasks.py verify --out-dir $(OUT_DIR_VERIFY)
+
+clean:
+	rm -rf out
+

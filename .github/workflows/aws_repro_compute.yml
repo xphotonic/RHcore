@@ -1,0 +1,86 @@
+name: aws-repro-compute
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Upload to S3 after successful run"
+        required: false
+        default: "false"
+      n:
+        description: "Number of rows in ZERO_TABLE"
+        required: false
+        default: "10"
+      seed:
+        description: "Deterministic seed"
+        required: false
+        default: "42"
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT: myproj
+      BUCKET: lab-artifacts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install cosign
+        run: |
+          curl -sSL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 \
+            -o /usr/local/bin/cosign
+          chmod +x /usr/local/bin/cosign
+          cosign version
+
+      - name: Run reproducible compute
+        run: |
+          N_VAL="${{ github.event.inputs.n }}"
+          SEED_VAL="${{ github.event.inputs.seed }}"
+          if [ -z "$N_VAL" ]; then N_VAL="10"; fi
+          if [ -z "$SEED_VAL" ]; then SEED_VAL="42"; fi
+          make -f Makefile.repro \
+            RUN_ID=${GITHUB_SHA} \
+            N=$N_VAL \
+            SEED=$SEED_VAL \
+            all
+
+      - name: Verify local attestation
+        run: |
+          python tasks.py verify --out-dir out/${GITHUB_SHA}
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ github.event.inputs.upload == 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+
+      - name: Upload to S3
+        if: ${{ github.event.inputs.upload == 'true' }}
+        run: |
+          make -f Makefile.repro \
+            RUN_ID=${GITHUB_SHA} \
+            BUCKET=${BUCKET} \
+            PROJECT=${PROJECT} \
+            push
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repro-bundle-${{ github.sha }}
+          path: out/${{ github.sha }}/

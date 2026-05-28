@@ -1,0 +1,33 @@
+name: lean-dependency-guard
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leanprover/lean-action@v1
+        with:
+          use-mathlib-cache: true
+
+      - name: Sync dependencies
+        run: lake update
+
+      - name: Check toolchain and manifest health
+        run: python3 tools/check_lean_dependency_health.py
+
+      - name: Build package
+        run: lake build
+
+      - name: Run Lean smoke tests
+        run: |
+          lake env lean test/li_pos_first50.lean
+          lake env lean --run test/closure_stub.lean

@@ -1,0 +1,51 @@
+{
+  "machine": "Reference Deck v2.1 Closed Engine",
+  "status": "PASS",
+  "gates": [
+    {
+      "name": "Gate 0 - Carrier / Source Admissibility",
+      "status": "PASS",
+      "constraint": "zeros source must already be admissible",
+      "failure_reason": null
+    },
+    {
+      "name": "Gate 1 - Schema Correctness",
+      "status": "PASS",
+      "constraint": "li artifact must use the single midpoint/radius schema",
+      "failure_reason": null
+    },
+    {
+      "name": "Gate 2 - Checksum Consistency",
+      "status": "PASS",
+      "constraint": "every li row must be bound to the same zeros checksum",
+      "failure_reason": null
+    },
+    {
+      "name": "Gate 3 - Interval Containment",
+      "status": "PASS",
+      "constraint": "midpoint +/- radius must form a valid finite interval",
+      "failure_reason": null
+    },
+    {
+      "name": "Gate 4 - Radius Bound",
+      "status": "PASS",
+      "constraint": "each radius must stay below the closure threshold",
+      "failure_reason": null
+    },
+    {
+      "name": "Gate 5 - Final Closure Decision",
+      "status": "PASS",
+      "constraint": "all prior gates must pass for closure to be frozen",
+      "failure_reason": null
+    }
+  ],
+  "summary": {
+    "closure_status": "PASS",
+    "checks": {
+      "checksum_match": true,
+      "interval_containment": true,
+      "radius_bound": true,
+      "schema_correctness": true
+    }
+  }
+}

@@ -1,0 +1,146 @@
+name: certify-numeric
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "data/li_n_intervals.csv"
+      - "tools/generate_spectral_eigs.py"
+      - "tools/build_ro_crate.py"
+      - "RhCore/**"
+      - "lakefile.lean"
+      - "lean-toolchain"
+      - ".github/workflows/certify_numeric.yml"
+  push:
+    paths:
+      - "data/li_n_intervals.csv"
+      - "tools/generate_spectral_eigs.py"
+      - "tools/build_ro_crate.py"
+      - "RhCore/**"
+      - "lakefile.lean"
+      - "lean-toolchain"
+      - ".github/workflows/certify_numeric.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq build-essential python3 python3-venv git tar zip
+          python3 -m pip install --upgrade pip
+          python3 -m pip install rocrate
+
+      - name: install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: install Lean
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: true
+          use-mathlib-cache: true
+          build: false
+
+      - name: fail-fast checks
+        run: |
+          test -f lakefile.lean || (echo "missing lakefile.lean" && exit 1)
+          test -f lean-toolchain || (echo "missing lean-toolchain" && exit 1)
+          test -f data/li_n_intervals.csv || (echo "missing data/li_n_intervals.csv" && exit 1)
+          test -f tools/generate_spectral_eigs.py || (echo "missing tools/generate_spectral_eigs.py" && exit 1)
+          test -f tools/build_ro_crate.py || (echo "missing tools/build_ro_crate.py" && exit 1)
+          test -f tools/verify_ro_crate_checksums.py || (echo "missing tools/verify_ro_crate_checksums.py" && exit 1)
+
+      - name: validate pinned tool commits when report exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f l2-run-report.json ]; then
+            echo "l2-run-report.json not present; skipping FLINT/Arb commit validation in simplified current-repo mode"
+            exit 0
+          fi
+          ARB_COMMIT=$(jq -r '.tools.arb.commit' l2-run-report.json)
+          FLINT_COMMIT=$(jq -r '.tools.flint.commit' l2-run-report.json)
+          echo "ARB_COMMIT=$ARB_COMMIT" >> "$GITHUB_ENV"
+          echo "FLINT_COMMIT=$FLINT_COMMIT" >> "$GITHUB_ENV"
+          if ! printf '%s' "$ARB_COMMIT" | grep -qE '^[0-9a-f]{40}$'; then echo "ARB_COMMIT invalid" && exit 1; fi
+          if ! printf '%s' "$FLINT_COMMIT" | grep -qE '^[0-9a-f]{40}$'; then echo "FLINT_COMMIT invalid" && exit 1; fi
+          git ls-remote https://github.com/arblib/arb.git "$ARB_COMMIT" | grep -q "$ARB_COMMIT" || (echo "ARB commit not found" && exit 1)
+          git ls-remote https://github.com/flintlib/flint.git "$FLINT_COMMIT" | grep -q "$FLINT_COMMIT" || (echo "FLINT commit not found" && exit 1)
+
+      - name: generate Lean numeric artifact
+        run: |
+          python3 tools/generate_spectral_eigs.py \
+            --input data/li_n_intervals.csv \
+            --out RhCore/Spectral/GeneratedEigs.lean
+          sha256sum RhCore/Spectral/GeneratedEigs.lean | awk '{print $1}' > generated_eigs.sha256
+
+      - name: sign generated Lean artifact keylessly
+        run: |
+          cosign sign-blob --yes \
+            --output-signature generated_eigs.lean.sig \
+            --output-certificate generated_eigs.lean.pem \
+            RhCore/Spectral/GeneratedEigs.lean
+          sha256sum generated_eigs.lean.sig | awk '{print $1}' > generated_eigs.lean.sig.sha256
+
+      - name: verify signature before Lean build
+        run: |
+          cosign verify-blob \
+            --certificate generated_eigs.lean.pem \
+            --signature generated_eigs.lean.sig \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            RhCore/Spectral/GeneratedEigs.lean
+
+      - name: build RO-Crate metadata
+        run: |
+          python3 tools/build_ro_crate.py \
+            --artifact data/li_n_intervals.csv \
+            --artifact RhCore/Spectral/GeneratedEigs.lean \
+            --artifact generated_eigs.sha256 \
+            --artifact generated_eigs.lean.sig \
+            --artifact generated_eigs.lean.pem \
+            --artifact generated_eigs.lean.sig.sha256 \
+            --artifact OWNERS.md \
+            --out ro-crate-metadata.json \
+            --attestation generated_eigs.attestation.json \
+            --run-id "${{ github.run_id }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --nb-params '{"source":"data/li_n_intervals.csv","generated":"RhCore/Spectral/GeneratedEigs.lean"}'
+          python3 tools/verify_ro_crate_checksums.py --crate ro-crate-metadata.json --root .
+
+      - name: build Lean and generated artifact
+        run: |
+          lake build RhCore.Spectral.GeneratedEigs
+          lake build
+
+      - name: collect .olean proofs
+        run: |
+          mkdir -p artifacts/lean-olean
+          find .lake/build/lib -name "*.olean" -exec cp --parents '{}' artifacts/lean-olean/ \;
+          tar czf artifacts/numeric-certified-proofs.tar.gz \
+            artifacts/lean-olean \
+            ro-crate-metadata.json \
+            generated_eigs.attestation.json \
+            RhCore/Spectral/GeneratedEigs.lean \
+            generated_eigs.lean.sig \
+            generated_eigs.lean.pem \
+            generated_eigs.lean.sig.sha256 \
+            generated_eigs.sha256
+
+      - name: upload certified artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: numeric-certified-artifacts
+          path: artifacts/numeric-certified-proofs.tar.gz

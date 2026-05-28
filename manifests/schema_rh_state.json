@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schemas/schema_rh_state.json",
+  "title": "RH_STATE manifest",
+  "type": "object",
+  "required": [
+    "run_id",
+    "time_utc",
+    "git_commit",
+    "platform",
+    "environment",
+    "inputs",
+    "instance"
+  ],
+  "properties": {
+    "run_id": { "type": "string", "minLength": 1 },
+    "time_utc": { "type": "string", "minLength": 1 },
+    "git_commit": { "type": "string", "minLength": 1 },
+    "platform": {
+      "type": "object",
+      "required": ["python", "system"],
+      "properties": {
+        "python": { "type": "string" },
+        "system": { "type": "string" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["lock_file"],
+      "properties": {
+        "lock_file": { "type": "string" },
+        "lock_sha256": { "type": ["string", "null"] }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["s3", "sha256"],
+        "properties": {
+          "s3": { "type": "string" },
+          "sha256": { "type": "string" }
+        }
+      }
+    },
+    "instance": {
+      "type": "object",
+      "required": ["type", "spot"],
+      "properties": {
+        "type": { "type": "string" },
+        "spot": { "type": "boolean" }
+      }
+    }
+  }
+}
+

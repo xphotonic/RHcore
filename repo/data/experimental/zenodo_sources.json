@@ -1,0 +1,20 @@
+[
+  {
+    "dataset": "szilard",
+    "doi": "10.5281/zenodo.14516010",
+    "license": "CC-BY-4.0",
+    "record_url": "https://zenodo.org/records/14516010"
+  },
+  {
+    "dataset": "ot_arhmm",
+    "doi": "10.5281/zenodo.13323961",
+    "license": "CC-BY-4.0",
+    "record_url": "https://zenodo.org/records/13323961"
+  },
+  {
+    "dataset": "cantilever",
+    "doi": "10.5281/zenodo.13829200",
+    "license": "CC-BY-4.0",
+    "record_url": "https://zenodo.org/records/13829200"
+  }
+]

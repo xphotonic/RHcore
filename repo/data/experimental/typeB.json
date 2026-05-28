@@ -1,0 +1,11 @@
+{
+  "volt_gain_rel":   0.002,
+  "curr_gain_rel":   0.003,
+  "timing_rel":      0.0005,
+  "_notes": {
+    "volt_gain_rel":  "voltage amplifier gain calibration (0.2%)",
+    "curr_gain_rel":  "current transducer gain (0.3%)",
+    "timing_rel":     "sample clock jitter (0.05%)",
+    "reference":      "arXiv:1503.06537 Table 1"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_name":       "rhcore-reference-closure",
+  "region":             "us-east-1",
+  "artifact_bucket":    "replace-with-artifact-bucket",
+  "input_zeros_key":    "input/zeros/zeros_prechecked.csv",
+  "radius_threshold":   "1e-12",
+  "li_bits":            "512",
+  "n_start":            "10",
+  "n_end":              "20",
+  "julia_version":      "1.10.9",
+  "run_prefix":         "runs",
+  "release_prefix":     "releases",
+  "codebuild_projects": {
+    "zeros_sanity":      "rhcore-zeros-sanity",
+    "li_intervals":      "rhcore-li-intervals",
+    "micro_closures":    "rhcore-micro-closures",
+    "validate_and_freeze": "rhcore-validate-freeze"
+  },
+  "s3_layout": {
+    "input":    "input/zeros/zeros_prechecked.csv",
+    "runs":     "runs/<run-id>/",
+    "releases": "releases/<run-id>/",
+    "micro":    "runs/<run-id>/micro_closures/"
+  },
+  "iam_notes": {
+    "codebuild_role": "needs s3:GetObject, s3:PutObject on artifact_bucket",
+    "stepfunctions_role": "needs codebuild:StartBuild, codebuild:BatchGetBuilds"
+  }
+}

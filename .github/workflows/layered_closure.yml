@@ -1,0 +1,172 @@
+name: Reference Closure Refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  zeros_sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+      - name: Build zeros status
+        run: python tools/zeta_sanity.py --zeros=repo/data/zeros_prechecked.csv > zeta_status.json
+      - name: Upload zeros artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeros_bundle
+          path: |
+            repo/data/zeros_prechecked.csv
+            zeta_status.json
+
+  li_intervals:
+    runs-on: ubuntu-latest
+    needs: [zeros_sanity]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.10"
+      - name: Download zeros artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: zeros_bundle
+          path: .
+      - name: Instantiate
+        run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: Resolve zeros checksum
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          with open("zeta_status.json", "r", encoding="utf-8") as handle:
+              payload = json.load(handle)
+          chk = payload.get("summary", {}).get("zeros_checksum", "")
+          if not chk:
+              raise SystemExit("zeros_checksum missing from zeta_status.json")
+          print(f"ZEROS_CHECKSUM={chk}")
+          PY
+      - name: Extend lambda_n intervals
+        run: julia --project=. ci/li_extend.jl --bits=512 --n_start=10 --n_end=20 --zeros-checksum=${ZEROS_CHECKSUM} --out=li_n_intervals.csv
+      - name: Upload Li artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: li_bundle
+          path: li_n_intervals.csv
+
+  validate_and_package:
+    runs-on: ubuntu-latest
+    needs: [zeros_sanity, li_intervals]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: sigstore/cosign-installer@v3
+      - name: Download zeros artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: zeros_bundle
+          path: .
+      - name: Download Li artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: li_bundle
+          path: .
+      - name: Validate closure state
+        run: bash scripts/closure_invariant_check.sh --zeros-status=zeta_status.json --li=li_n_intervals.csv --radius-threshold=1e-12 --out=closure_status.json --trace-out=closure_trace.json
+      - name: Sign li_n_intervals artifact with Sigstore + Rekor
+        run: |
+          cosign sign-blob --yes \
+            --bundle li_n_intervals.csv.bundle.json \
+            --output-signature li_n_intervals.csv.sig \
+            --output-certificate li_n_intervals.csv.pem \
+            li_n_intervals.csv 2>&1 | tee cosign_li_intervals.out
+      - name: Freeze unsigned closure bundle
+        run: |
+          tar -czf reference_closure_bundle.tar.gz \
+            repo/data/zeros_prechecked.csv \
+            zeta_status.json \
+            li_n_intervals.csv \
+            li_n_intervals.csv.sig \
+            li_n_intervals.csv.pem \
+            li_n_intervals.csv.bundle.json \
+            closure_status.json \
+            closure_trace.json \
+            OWNERS.md
+          sha256sum reference_closure_bundle.tar.gz > reference_closure_bundle.sha256
+      - name: Sign bundle with Sigstore
+        run: |
+          cosign sign-blob --yes \
+            --bundle reference_closure_bundle.tar.gz.bundle.json \
+            --output-signature reference_closure_bundle.sig \
+            --output-certificate reference_closure_bundle.pem \
+            reference_closure_bundle.tar.gz 2>&1 | tee cosign_bundle.out
+      - name: Build RO-Crate metadata + SLSA attestation
+        run: |
+          python tools/build_ro_crate.py \
+            --artifact repo/data/zeros_prechecked.csv \
+            --artifact zeta_status.json \
+            --artifact li_n_intervals.csv \
+            --artifact closure_status.json \
+            --artifact closure_trace.json \
+            --artifact reference_closure_bundle.tar.gz \
+            --artifact OWNERS.md \
+            --out ro-crate-metadata.json \
+            --attestation attestation.json \
+            --run-id "${{ github.run_id }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --patch-rekor cosign_bundle.out \
+            --provenance '{"arb_numerics":"ArbNumerics v1.6.3","zeros_wheel":"passagemath-database-odlyzko-zeta==10.8.4","li_script":"ci/li_extend.jl@${{ github.sha }}"}'
+      - name: Upload closure artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: closure_bundle
+          path: |
+            closure_status.json
+            closure_trace.json
+            ro-crate-metadata.json
+            attestation.json
+            reference_closure_bundle.tar.gz
+            reference_closure_bundle.sha256
+            reference_closure_bundle.tar.gz.bundle.json
+            reference_closure_bundle.sig
+            reference_closure_bundle.pem
+            li_n_intervals.csv.sig
+            li_n_intervals.csv.pem
+            li_n_intervals.csv.bundle.json
+
+  gate:
+    runs-on: ubuntu-latest
+    needs: [validate_and_package]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: closure_bundle
+          path: .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Gate on closure PASS
+        run: |
+          python - <<'PY'
+          import json
+          with open("closure_status.json", "r", encoding="utf-8") as handle:
+              payload = json.load(handle)
+          if payload.get("status") != "PASS":
+              raise SystemExit(json.dumps(payload, indent=2))
+          print("Closure PASS")
+          PY

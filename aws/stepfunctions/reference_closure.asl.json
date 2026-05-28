@@ -1,0 +1,79 @@
+{
+  "Comment": "RhCore full pipeline: zeros → Li → micro-closures → validate → freeze → cyber-artifact",
+  "StartAt": "ZerosSanity",
+  "States": {
+    "ZerosSanity": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::codebuild:startBuild.sync",
+      "Parameters": {
+        "ProjectName.$": "$.projects.zeros_sanity",
+        "EnvironmentVariablesOverride": [
+          {"Name": "RUN_ID",           "Type": "PLAINTEXT", "Value.$": "$.run_id"},
+          {"Name": "ARTIFACT_BUCKET",  "Type": "PLAINTEXT", "Value.$": "$.artifact_bucket"},
+          {"Name": "INPUT_ZEROS_KEY",  "Type": "PLAINTEXT", "Value.$": "$.input_zeros_key"},
+          {"Name": "RUN_PREFIX",       "Type": "PLAINTEXT", "Value.$": "$.run_prefix"}
+        ]
+      },
+      "Next": "LiIntervals",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Failure"}]
+    },
+
+    "LiIntervals": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::codebuild:startBuild.sync",
+      "Parameters": {
+        "ProjectName.$": "$.projects.li_intervals",
+        "EnvironmentVariablesOverride": [
+          {"Name": "RUN_ID",          "Type": "PLAINTEXT", "Value.$": "$.run_id"},
+          {"Name": "ARTIFACT_BUCKET", "Type": "PLAINTEXT", "Value.$": "$.artifact_bucket"},
+          {"Name": "RUN_PREFIX",      "Type": "PLAINTEXT", "Value.$": "$.run_prefix"},
+          {"Name": "LI_BITS",         "Type": "PLAINTEXT", "Value.$": "$.li_bits"},
+          {"Name": "N_START",         "Type": "PLAINTEXT", "Value.$": "$.n_start"},
+          {"Name": "N_END",           "Type": "PLAINTEXT", "Value.$": "$.n_end"},
+          {"Name": "JULIA_VERSION",   "Type": "PLAINTEXT", "Value.$": "$.julia_version"}
+        ]
+      },
+      "Next": "MicroClosures",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Failure"}]
+    },
+
+    "MicroClosures": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::codebuild:startBuild.sync",
+      "Parameters": {
+        "ProjectName.$": "$.projects.micro_closures",
+        "EnvironmentVariablesOverride": [
+          {"Name": "RUN_ID",          "Type": "PLAINTEXT", "Value.$": "$.run_id"},
+          {"Name": "ARTIFACT_BUCKET", "Type": "PLAINTEXT", "Value.$": "$.artifact_bucket"},
+          {"Name": "RUN_PREFIX",      "Type": "PLAINTEXT", "Value.$": "$.run_prefix"}
+        ]
+      },
+      "Next": "ValidateAndFreeze",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Failure"}]
+    },
+
+    "ValidateAndFreeze": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::codebuild:startBuild.sync",
+      "Parameters": {
+        "ProjectName.$": "$.projects.validate_and_freeze",
+        "EnvironmentVariablesOverride": [
+          {"Name": "RUN_ID",           "Type": "PLAINTEXT", "Value.$": "$.run_id"},
+          {"Name": "ARTIFACT_BUCKET",  "Type": "PLAINTEXT", "Value.$": "$.artifact_bucket"},
+          {"Name": "INPUT_ZEROS_KEY",  "Type": "PLAINTEXT", "Value.$": "$.input_zeros_key"},
+          {"Name": "RUN_PREFIX",       "Type": "PLAINTEXT", "Value.$": "$.run_prefix"},
+          {"Name": "RELEASE_PREFIX",   "Type": "PLAINTEXT", "Value.$": "$.release_prefix"},
+          {"Name": "RADIUS_THRESHOLD", "Type": "PLAINTEXT", "Value.$": "$.radius_threshold"}
+        ]
+      },
+      "Next": "Success",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "Failure"}]
+    },
+
+    "Success": {"Type": "Succeed"},
+    "Failure": {
+      "Type": "Fail",
+      "Cause": "RhCore pipeline failed."
+    }
+  }
+}

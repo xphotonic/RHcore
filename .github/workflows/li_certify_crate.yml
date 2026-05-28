@@ -1,0 +1,159 @@
+name: li-certify-crate
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ci/li_extend.jl"
+      - "repo/data/zeros_prechecked.csv"
+
+permissions:
+  contents: read
+  id-token: write   # required for keyless cosign
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.10"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - uses: sigstore/cosign-installer@v3
+
+      # ── Stage 1: zeros sanity ──────────────────────────────────────────
+      - name: Zeros sanity
+        run: |
+          python tools/zeta_sanity.py \
+            --zeros=repo/data/zeros_prechecked.csv \
+            > zeta_status.json
+          python -c "
+          import json, sys
+          d = json.load(open('zeta_status.json'))
+          if d['status'] != 'PASS':
+              sys.exit(f'zeros sanity FAIL: {d}')
+          print('zeros_checksum:', d['summary']['zeros_checksum'][:16], '...')
+          "
+
+      # ── Stage 2: Li intervals ──────────────────────────────────────────
+      - name: Extract zeros checksum
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          d = json.load(open("zeta_status.json"))
+          print(f"ZEROS_CHECKSUM={d['summary']['zeros_checksum']}")
+          PY
+
+      - name: Generate Li intervals
+        run: |
+          julia --project=. ci/li_extend.jl \
+            --bits=512 \
+            --n_start=10 \
+            --n_end=20 \
+            --zeros-checksum="${ZEROS_CHECKSUM}" \
+            --out=li_n_intervals.csv
+
+      - name: Validate Li artifact
+        run: |
+          python tools/validate_li_artifact.py \
+            --zeros-status=zeta_status.json \
+            --li=li_n_intervals.csv \
+            --radius-threshold=1e-12 \
+            --out=closure_status.json \
+            --trace-out=closure_trace.json
+
+      # ── Stage 3: hash ──────────────────────────────────────────────────
+      - name: Compute SHA256
+        id: sha
+        run: |
+          SHA=$(sha256sum li_n_intervals.csv | cut -d' ' -f1)
+          echo "li_sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "li_sha=${SHA}"
+
+      # ── Stage 4: sign + Rekor ──────────────────────────────────────────
+      - name: Sign with cosign (keyless → Rekor)
+        id: sign
+        run: |
+          cosign sign-blob --yes \
+            --output-signature li_n_intervals.csv.sig \
+            --output-certificate li_n_intervals.csv.pem \
+            li_n_intervals.csv \
+            2>&1 | tee cosign_out.txt
+          # extract Rekor log index
+          REKOR=$(grep -oP 'rekor\.sigstore\.dev/api/v1/log/entries/\K[0-9a-f]+' cosign_out.txt | head -1 || echo "pending")
+          echo "rekor_entry=${REKOR}" >> "$GITHUB_OUTPUT"
+          echo "rekor_entry=${REKOR}"
+
+      # ── Stage 5: RO-Crate + SLSA attestation ──────────────────────────
+      - name: Build RO-Crate + attestation
+        run: |
+          python tools/build_ro_crate.py \
+            --artifact li_n_intervals.csv \
+            --artifact zeta_status.json \
+            --artifact closure_status.json \
+            --artifact closure_trace.json \
+            --artifact OWNERS.md \
+            --out ro-crate-metadata.json \
+            --attestation li_n_intervals.attestation.json \
+            --rekor-entry "${{ steps.sign.outputs.rekor_entry }}" \
+            --run-id "${{ github.run_id }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --nb-params '{"precision_bits":512,"n_start":10,"n_end":20,"julia_version":"1.10"}'
+
+      # ── Stage 6: zip crate ─────────────────────────────────────────────
+      - name: Package RO-Crate ZIP
+        run: |
+          zip li_certify_crate.zip \
+            li_n_intervals.csv \
+            li_n_intervals.csv.sig \
+            li_n_intervals.csv.pem \
+            li_n_intervals.attestation.json \
+            ro-crate-metadata.json \
+            zeta_status.json \
+            closure_status.json \
+            closure_trace.json \
+            OWNERS.md
+          sha256sum li_certify_crate.zip > li_certify_crate.zip.sha256
+          echo "crate_sha=$(sha256sum li_certify_crate.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # ── Stage 7: sign the crate ZIP ────────────────────────────────────
+      - name: Sign crate ZIP
+        run: |
+          cosign sign-blob --yes \
+            --output-signature li_certify_crate.zip.sig \
+            --output-certificate li_certify_crate.zip.pem \
+            li_certify_crate.zip
+
+      # ── Stage 8: upload ────────────────────────────────────────────────
+      - name: Upload certified crate
+        uses: actions/upload-artifact@v4
+        with:
+          name: "li-certify-crate-${{ github.run_id }}"
+          path: |
+            li_certify_crate.zip
+            li_certify_crate.zip.sha256
+            li_certify_crate.zip.sig
+            li_certify_crate.zip.pem
+            ro-crate-metadata.json
+            li_n_intervals.attestation.json
+
+      # ── Stage 9: summary ───────────────────────────────────────────────
+      - name: Print summary
+        run: |
+          echo "## Li Certify Crate" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| li_sha256 | \`${{ steps.sha.outputs.li_sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| rekor_entry | \`${{ steps.sign.outputs.rekor_entry }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| run_url | ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} |" >> "$GITHUB_STEP_SUMMARY"

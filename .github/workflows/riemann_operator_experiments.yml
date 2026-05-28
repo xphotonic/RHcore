@@ -1,0 +1,45 @@
+name: riemann-operator-experiments
+
+on:
+  push:
+    paths:
+      - "tools/riemann_operator_experiments.py"
+      - "RhCore/Spectral/RiemannOperatorExperiments.lean"
+      - ".github/workflows/riemann_operator_experiments.yml"
+  pull_request:
+    paths:
+      - "tools/riemann_operator_experiments.py"
+      - "RhCore/Spectral/RiemannOperatorExperiments.lean"
+      - ".github/workflows/riemann_operator_experiments.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run RiemannOperator heat/parity/trace smoke experiments
+        run: |
+          python tools/riemann_operator_experiments.py run_all \
+            --json outputs/riemann_operator_experiments.json \
+            --csv outputs/riemann_operator_experiments.csv \
+            --strict
+
+      - uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: true
+          use-mathlib-cache: true
+          build-args: RhCore.Spectral.RiemannOperatorExperiments
+
+      - name: Upload experiment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: riemann-operator-experiments
+          path: |
+            outputs/riemann_operator_experiments.json
+            outputs/riemann_operator_experiments.csv

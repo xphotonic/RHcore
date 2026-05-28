@@ -1,0 +1,58 @@
+name: toolchain-sync
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # weekly Monday check
+
+permissions:
+  contents: read
+
+jobs:
+  check-toolchain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read local toolchain
+        id: local
+        run: echo "version=$(cat lean-toolchain | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Read mathlib4 toolchain
+        id: mathlib
+        run: |
+          curl -sSL \
+            https://raw.githubusercontent.com/leanprover-community/mathlib4/v4.14.0/lean-toolchain \
+            -o mathlib_toolchain.txt
+          echo "version=$(cat mathlib_toolchain.txt | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Check sync
+        run: |
+          LOCAL="${{ steps.local.outputs.version }}"
+          MATHLIB="${{ steps.mathlib.outputs.version }}"
+          echo "Local:   $LOCAL"
+          echo "Mathlib: $MATHLIB"
+          if [ "$LOCAL" != "$MATHLIB" ]; then
+            echo "::warning::lean-toolchain mismatch: local=$LOCAL mathlib=$MATHLIB"
+            echo "Run: curl -sSL https://raw.githubusercontent.com/leanprover-community/mathlib4/v4.14.0/lean-toolchain -o lean-toolchain"
+          else
+            echo "Toolchain in sync: $LOCAL"
+          fi
+
+  lean-build:
+    runs-on: ubuntu-latest
+    needs: check-toolchain
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leanprover/lean-action@v1
+        with:
+          use-mathlib-cache: true
+          auto-config: false
+
+      - name: Build RhCore
+        run: lake build
+
+      - name: Smoke test
+        run: lake env lean test/closure_stub.lean

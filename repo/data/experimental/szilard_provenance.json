@@ -1,0 +1,22 @@
+{
+  "dataset": "szilard",
+  "source": "repo\\data\\experimental\\synthetic_erasure.csv",
+  "sha256": "5d30df5577615fd6d4e1e224c9c380db9d96b5f335d519090cef0762d77797c6",
+  "doi": "10.5281/zenodo.14516010",
+  "license": "CC-BY-4.0",
+  "record_url": "https://zenodo.org/records/14516010",
+  "n_rows": 20,
+  "trace_out": "repo\\data\\experimental\\szilard_trace.csv",
+  "landauer": {
+    "card": "landauer-gate",
+    "status": "WARN",
+    "kT": 4.1e-21,
+    "threshold_kT_ln2": 2.8419034402957755e-21,
+    "n_events": 20,
+    "violations": 2,
+    "min_energy": 2.7e-21,
+    "mean_energy": 3.4300000000000004e-21,
+    "ratio_min_to_threshold": 0.9500674659512687,
+    "interpretation": "2 events below kT*ln2 \u2014 check units or normalization"
+  }
+}

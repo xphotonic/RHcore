@@ -1,0 +1,27 @@
+{
+  "layer": "closure",
+  "status": "PASS",
+  "representation": {
+    "zeros": "ordered_ordinates_with_checksum",
+    "li": "midpoint_radius",
+    "state": "json_pass_fail"
+  },
+  "sources": {
+    "zeros_status": "zeta_status.json",
+    "li_csv": "repo\\data\\li_n_intervals.csv"
+  },
+  "checks": {
+    "checksum_match": true,
+    "interval_containment": true,
+    "radius_bound": true,
+    "schema_correctness": true
+  },
+  "summary": {
+    "zeros_checksum": "f970df2cb210e58c085c8e557e540f6ea28f324bf90211f180051259a92534b9",
+    "radius_threshold": 1e-12,
+    "max_radius": 8.271806125530277e-25,
+    "row_count": 3,
+    "n_start": 10,
+    "n_end": 12
+  }
+}

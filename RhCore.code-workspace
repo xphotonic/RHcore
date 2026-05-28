@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "name": "RhCore",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "lean4.enableLake": true,
+    "lean4.lakePath": "C:\\Users\\uu\\.elan\\bin\\lake.exe",
+    "lean4.serverEnvPaths": [
+      "C:\\Users\\uu\\.elan\\bin"
+    ],
+    "DockerRun.DisableDockerrc": true
+  }
+}
+

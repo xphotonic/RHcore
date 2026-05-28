@@ -1,0 +1,23 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - pip install -r requirements.txt
+  build:
+    commands:
+      - test -n "$ARTIFACT_BUCKET"
+      - test -n "$RUN_ID"
+      - test -n "$INPUT_ZEROS_KEY"
+      - test -n "$RUN_PREFIX"
+      - mkdir -p repo/data
+      - aws s3 cp "s3://$ARTIFACT_BUCKET/$INPUT_ZEROS_KEY" repo/data/zeros_prechecked.csv
+      - python tools/zeta_sanity.py --zeros=repo/data/zeros_prechecked.csv > zeta_status.json
+      - aws s3 cp repo/data/zeros_prechecked.csv "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/zeros_prechecked.csv"
+      - aws s3 cp zeta_status.json "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/zeta_status.json"
+
+artifacts:
+  files:
+    - zeta_status.json

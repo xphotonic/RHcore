@@ -1,0 +1,90 @@
+name: micro-closures
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        card:
+          - spectral-anchor
+          - li-positivity-lean
+          - heat-kernel-smooth
+          - parity-involution
+          - phase-seal
+          - proof-seal-smoke
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        if: matrix.card == 'spectral-anchor' || matrix.card == 'parity-involution'
+        with:
+          version: "1.10"
+
+      - uses: actions/setup-python@v5
+        if: |
+          matrix.card == 'heat-kernel-smooth' ||
+          matrix.card == 'phase-seal' ||
+          matrix.card == 'li-positivity-lean'
+        with:
+          python-version: "3.11"
+
+      - uses: leanprover/lean-action@v1
+        if: matrix.card == 'proof-seal-smoke' || matrix.card == 'li-positivity-lean'
+        with:
+          use-mathlib-cache: true
+
+      - name: Run card
+        run: |
+          mkdir -p artifacts
+          case "${{ matrix.card }}" in
+            spectral-anchor)
+              julia --project=. ci/spectral_anchor.jl \
+                --n=256 --tol=1e-12 --out=artifacts/spectral_anchor.json
+              ;;
+            li-positivity-lean)
+              python ci/li_interval_json_check.py \
+                --intervals=ci/artifacts/li_intervals.json \
+                --limit=50 --out=artifacts/li_positivity.json
+              lake update
+              python tools/check_lean_dependency_health.py
+              lake build
+              lake env lean test/li_pos_first50.lean
+              ;;
+            heat-kernel-smooth)
+              python ci/heat_kernel_check.py \
+                --cutoff 50 --tol 1e-8 --out artifacts/heat_kernel_check.json
+              ;;
+            parity-involution)
+              julia --project=. ci/parity_involution.jl \
+                --tol=1e-10 --out=artifacts/parity_involution.json
+              ;;
+            phase-seal)
+              python ci/phase_seal_check.py \
+                --mesh 512 --out artifacts/phase_seal.json
+              ;;
+            proof-seal-smoke)
+              lake update
+              python tools/check_lean_dependency_health.py
+              lake build
+              lake env lean --run test/closure_stub.lean
+              lake env lean -o artifacts/closure_stub.olean test/closure_stub.lean
+              test -f artifacts/closure_stub.olean
+              printf '{"card":"proof-seal-smoke","status":"PASS"}\n' > artifacts/proof_seal_smoke.json
+              ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: "artifacts-${{ matrix.card }}"
+          path: artifacts/

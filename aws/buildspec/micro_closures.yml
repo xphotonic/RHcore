@@ -1,0 +1,51 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - pip install -r requirements.txt
+  build:
+    commands:
+      - test -n "$ARTIFACT_BUCKET"
+      - test -n "$RUN_ID"
+      - test -n "$RUN_PREFIX"
+      - mkdir -p artifacts
+      - aws s3 cp "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/zeros_prechecked.csv" repo/data/zeros_prechecked.csv
+      - python ci/heat_kernel_check.py --cutoff 50 --tol 1e-8 --out artifacts/heat_kernel_check.json
+      - python ci/phase_seal_check.py --mesh 512 --zeros=repo/data/zeros_prechecked.csv --out artifacts/phase_seal.json
+      - python ci/li_interval_json_check.py --intervals=ci/artifacts/li_intervals.json --limit=50 --out artifacts/li_positivity.json
+      - python tools/poincare_witness.py --zeros=repo/data/zeros_prechecked.csv --T=35 --windows=20 --out artifacts/poincare_witness.json
+      - python tools/spectral_gap_check.py --N-primes=50 --T=35 --windows=20 --out artifacts/spectral_gap_check.json
+      - python tools/explicit_inequality_check.py --N-primes=50 --T=35 --windows=10 --out artifacts/explicit_inequality_check.json
+      - python tools/asymptotic_gap_check.py --T=20 --steps=300 --out artifacts/asymptotic_gap_check.json
+      - python tools/derivative_at_zeros_check.py --zeros=repo/data/zeros_prechecked.csv --N-primes=200 --out artifacts/derivative_at_zeros.json
+      - python tools/cyber_riemann_artifact.py --out artifacts/cyber_riemann_artifact.json
+      - |
+        python - <<'PY'
+        import json, sys
+        failed = []
+        checks = [
+            "artifacts/heat_kernel_check.json",
+            "artifacts/phase_seal.json",
+            "artifacts/poincare_witness.json",
+            "artifacts/spectral_gap_check.json",
+        ]
+        for path in checks:
+            try:
+                d = json.load(open(path))
+                if d.get("status") not in ("PASS", "WARN"):
+                    failed.append(path)
+            except Exception as e:
+                failed.append(f"{path}: {e}")
+        if failed:
+            print("FAILED:", failed)
+            sys.exit(1)
+        print("All micro-closure gates passed")
+        PY
+      - for f in artifacts/*.json; do aws s3 cp "$f" "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/micro_closures/$(basename $f)"; done
+
+artifacts:
+  files:
+    - artifacts/*.json

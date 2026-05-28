@@ -1,0 +1,12 @@
+{
+  "card": "landauer-gate",
+  "status": "WARN",
+  "kT": 4.1e-21,
+  "threshold_kT_ln2": 2.8419034402957755e-21,
+  "n_events": 20,
+  "violations": 2,
+  "min_energy": 2.7e-21,
+  "mean_energy": 3.4300000000000004e-21,
+  "ratio_min_to_threshold": 0.9500674659512687,
+  "interpretation": "2 events below kT*ln2 \u2014 check units or normalization"
+}

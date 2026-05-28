@@ -1,0 +1,37 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - pip install -r requirements.txt
+  build:
+    commands:
+      - test -n "$ARTIFACT_BUCKET"
+      - test -n "$RUN_ID"
+      - test -n "$INPUT_ZEROS_KEY"
+      - test -n "$RUN_PREFIX"
+      - test -n "$RELEASE_PREFIX"
+      - test -n "$RADIUS_THRESHOLD"
+      - mkdir -p repo/data
+      - aws s3 cp "s3://$ARTIFACT_BUCKET/$INPUT_ZEROS_KEY" repo/data/zeros_prechecked.csv
+      - aws s3 cp "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/zeta_status.json" zeta_status.json
+      - aws s3 cp "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/li_n_intervals.csv" li_n_intervals.csv
+      - python tools/validate_li_artifact.py --zeros-status=zeta_status.json --li=li_n_intervals.csv --radius-threshold="$RADIUS_THRESHOLD" --out=closure_status.json --trace-out=closure_trace.json
+      - python tools/build_ro_crate.py --artifact repo/data/zeros_prechecked.csv --artifact zeta_status.json --artifact li_n_intervals.csv --artifact closure_status.json --artifact closure_trace.json --artifact OWNERS.md --out ro-crate-metadata.json
+      - tar -czf reference_closure_bundle.tar.gz repo/data/zeros_prechecked.csv zeta_status.json li_n_intervals.csv closure_status.json closure_trace.json ro-crate-metadata.json OWNERS.md
+      - sha256sum reference_closure_bundle.tar.gz > reference_closure_bundle.sha256
+      - aws s3 cp closure_status.json "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/closure_status.json"
+      - aws s3 cp closure_trace.json "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/closure_trace.json"
+      - aws s3 cp ro-crate-metadata.json "s3://$ARTIFACT_BUCKET/$RUN_PREFIX/$RUN_ID/ro-crate-metadata.json"
+      - aws s3 cp reference_closure_bundle.tar.gz "s3://$ARTIFACT_BUCKET/$RELEASE_PREFIX/$RUN_ID/reference_closure_bundle.tar.gz"
+      - aws s3 cp reference_closure_bundle.sha256 "s3://$ARTIFACT_BUCKET/$RELEASE_PREFIX/$RUN_ID/reference_closure_bundle.sha256"
+
+artifacts:
+  files:
+    - closure_status.json
+    - closure_trace.json
+    - ro-crate-metadata.json
+    - reference_closure_bundle.tar.gz
+    - reference_closure_bundle.sha256

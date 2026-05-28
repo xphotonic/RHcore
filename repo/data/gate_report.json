@@ -1,0 +1,47 @@
+{
+  "status": "CLOSED",
+  "t_sample": 17.578382390253125,
+  "zeros_count": 5,
+  "gates": [
+    {
+      "gate": 0,
+      "name": "carrier",
+      "q": 0.11133944980647197,
+      "pass": true
+    },
+    {
+      "gate": 1,
+      "name": "no_tangency",
+      "S": -0.27671232971813337,
+      "dS": -0.1864664484255412,
+      "pass": true
+    },
+    {
+      "gate": 2,
+      "name": "local_energy",
+      "c": 0.01,
+      "pass": true
+    },
+    {
+      "gate": 3,
+      "name": "accumulation",
+      "P_T": 99.32731828433823,
+      "pass": true
+    },
+    {
+      "gate": 4,
+      "name": "uniqueness",
+      "extra_equilibria": [],
+      "pass": true
+    },
+    {
+      "gate": 5,
+      "name": "no_winding",
+      "crossings": 9,
+      "expected": 5,
+      "bound": 12,
+      "pass": true
+    }
+  ],
+  "open_gate": null
+}

@@ -1,0 +1,5 @@
+{
+  "volt_gain_rel": 0.002,
+  "curr_gain_rel": 0.003,
+  "timing_rel": 0.0005
+}

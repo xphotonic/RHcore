@@ -1,0 +1,13 @@
+{
+  "lean4.enableLake": true,
+  "lean4.lakePath": "C:\\Users\\uu\\.elan\\bin\\lake.exe",
+  "lean4.serverEnvPaths": [
+    "C:\\Users\\uu\\.elan\\bin"
+  ],
+  "lean4.serverLogging.enabled": true,
+  "lean4.serverLogging.path": ".vscode\\lean4-logs",
+  "lean4.autofocusOutput": false,
+  "lean4.infoview.autoOpen": true,
+  "DockerRun.DisableDockerrc": true
+}
+
