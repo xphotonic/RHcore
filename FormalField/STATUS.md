@@ -6,5 +6,8 @@
 - L2 StructuralRecords: COMPILES
 - L2 ProcessValidity: PROVED
 - L2 VerificationChain: PROVED
+- L3 ResultStatus: COMPILES
+- L3 GateCostReadout: PROVED
+- L3 GateCostReadout law: PROVED
 - no sorry/admit/axiom
 - lake build passes
