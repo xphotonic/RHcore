@@ -3,5 +3,8 @@
 - MainStructuralTheorem: PROVED
 - IntervalRecord: COMPILES
 - WitnessRecord: COMPILES
+- L2 StructuralRecords: COMPILES
+- L2 ProcessValidity: PROVED
+- L2 VerificationChain: PROVED
 - no sorry/admit/axiom
 - lake build passes
