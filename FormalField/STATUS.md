@@ -11,5 +11,7 @@
 - L3 GateCostReadout law: PROVED
 - L4 ResultClassification: PROVED
 - L4 ResultClassification law: PROVED
+- L5 MonotoneFieldPower: PROVED
+- L5 monotone_field_power_law: PROVED
 - no sorry/admit/axiom
 - lake build passes
