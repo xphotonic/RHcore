@@ -9,5 +9,7 @@
 - L3 ResultStatus: COMPILES
 - L3 GateCostReadout: PROVED
 - L3 GateCostReadout law: PROVED
+- L4 ResultClassification: PROVED
+- L4 ResultClassification law: PROVED
 - no sorry/admit/axiom
 - lake build passes
