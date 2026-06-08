@@ -1,0 +1,7 @@
+- L1 MetricTriadic: PROVED
+- CountingLift: PROVED
+- MainStructuralTheorem: PROVED
+- IntervalRecord: COMPILES
+- WitnessRecord: COMPILES
+- no sorry/admit/axiom
+- lake build passes
