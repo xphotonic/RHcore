@@ -15,5 +15,7 @@
 - L5 monotone_field_power_law: PROVED
 - L6 NoStableResidual: PROVED
 - L6 no_stable_residual_law: PROVED
+- L7 VerificationPipeline: PROVED
+- L7 verification_pipeline_law: PROVED
 - no sorry/admit/axiom
 - lake build passes
