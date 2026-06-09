@@ -30,5 +30,9 @@
 - L11 variation_type_law: PROVED
 - L11 type_genus_law: PROVED
 - L11 revealed_type_genus_law: PROVED
+- L12 OrderStatementClarification: PROVED
+- L12 order_statement_law: PROVED
+- L12 clarification_statement_law: PROVED
+- L12 clarification_implies_ordered_law: PROVED
 - no sorry/admit/axiom
 - lake build passes
