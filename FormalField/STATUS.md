@@ -17,5 +17,8 @@
 - L6 no_stable_residual_law: PROVED
 - L7 VerificationPipeline: PROVED
 - L7 verification_pipeline_law: PROVED
+- L8 FieldPassageFlow: PROVED
+- L8 passage_flow_effect_law: PROVED
+- L8 effect_readout_law: PROVED
 - no sorry/admit/axiom
 - lake build passes
