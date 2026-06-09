@@ -23,5 +23,8 @@
 - L9 ObserverDimensionSpace: PROVED
 - L9 observer_dimension_space_law: PROVED
 - L9 readout_dimension_gate_law: PROVED
+- L10 MetricCompanion: PROVED
+- L10 metric_companion_readout_law: PROVED
+- L10 metric_companion_generated_law: PROVED
 - no sorry/admit/axiom
 - lake build passes
