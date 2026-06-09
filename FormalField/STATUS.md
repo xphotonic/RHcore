@@ -42,5 +42,11 @@
 - L14 no_circular_closure_law: PROVED
 - L14 closed_dependency_not_circular_law: PROVED
 - L14 closed_dependency_proves_law: PROVED
+- L15 TerminalStructuralClosure: PROVED
+- L15 terminal_classification_law: PROVED
+- L15 terminal_exhaustive_law: PROVED
+- L15 final_core_terminal_classification_law: PROVED
+- L15 final_core_classifier_sound_law: PROVED
+- FormalField Core L1-L15: FROZEN_AFTER_L15_PENDING_COMMIT
 - no sorry/admit/axiom
 - lake build passes
