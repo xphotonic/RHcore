@@ -34,5 +34,9 @@
 - L12 order_statement_law: PROVED
 - L12 clarification_statement_law: PROVED
 - L12 clarification_implies_ordered_law: PROVED
+- L13 AssumptionConstraintClosure: PROVED
+- L13 assumption_is_not_closure_law: PROVED
+- L13 constraint_to_closure_law: PROVED
+- L13 closed_not_assumption_only_law: PROVED
 - no sorry/admit/axiom
 - lake build passes
