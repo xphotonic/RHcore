@@ -20,5 +20,8 @@
 - L8 FieldPassageFlow: PROVED
 - L8 passage_flow_effect_law: PROVED
 - L8 effect_readout_law: PROVED
+- L9 ObserverDimensionSpace: PROVED
+- L9 observer_dimension_space_law: PROVED
+- L9 readout_dimension_gate_law: PROVED
 - no sorry/admit/axiom
 - lake build passes
