@@ -4,3 +4,4 @@ import RhCore.Li.LiRows
 import RhCore.Li.Certified
 import RhCore.Li.AnomalyRadar
 import RhCore.Li.ZeroSum
+import RhCore.Li.GeneratedEigsBridge

@@ -11,7 +11,8 @@
     "lean4.serverEnvPaths": [
       "C:\\Users\\uu\\.elan\\bin"
     ],
-    "DockerRun.DisableDockerrc": true
+    "DockerRun.DisableDockerrc": true,
+    "DockerRun.DisableAutoGenerateConfig": true
   }
 }
 

@@ -6,6 +6,7 @@ import RhCore.Core.EnergyCoercivity
 import RhCore.Core.PrimeField
 import RhCore.Core.CarrierGateCost
 import RhCore.Core.HeatTraceClosure
+import RhCore.Core.Mellin
 import RhCore.Core.ExplicitFormula
 import RhCore.Core.SelbergClosure
 import RhCore.Core.SpectralGap
@@ -14,6 +15,7 @@ import RhCore.Core.AsymptoticGap
 import RhCore.Core.SpectralGrowthConstant
 import RhCore.Li
 import RhCore.Spectral.RiemannOperatorExperiments
+import RhCore.Spectral.RiemannOperator
 import RhCore.RH.Main
 import RhCore.RH.CheckableHypothesis
 
