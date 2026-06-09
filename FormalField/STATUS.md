@@ -26,5 +26,9 @@
 - L10 MetricCompanion: PROVED
 - L10 metric_companion_readout_law: PROVED
 - L10 metric_companion_generated_law: PROVED
+- L11 VariationTypeGenus: PROVED
+- L11 variation_type_law: PROVED
+- L11 type_genus_law: PROVED
+- L11 revealed_type_genus_law: PROVED
 - no sorry/admit/axiom
 - lake build passes
